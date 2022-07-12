@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2018-2019, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -159,8 +159,6 @@ struct ssusb_redriver {
 	u8	loss_match[CHAN_MODE_NUM][CHANNEL_NUM];
 	u8	flat_gain[CHAN_MODE_NUM][CHANNEL_NUM];
 
-	u8	gen_dev_val;
-
 	struct dentry	*debug_root;
 };
 
@@ -285,18 +283,11 @@ static void ssusb_redriver_gen_dev_set(
 	}
 
 	/* exit/enter deep-sleep power mode */
-	oldval = redriver->gen_dev_val;
-	if (on) {
+	if (on)
 		val |= CHIP_EN;
-		if (val == oldval)
-			return;
-	} else {
-		/* no operation if already disabled */
-		if (oldval && !(oldval & CHIP_EN))
-			return;
-
+	else
 		val &= ~CHIP_EN;
-	}
+
 	ret = redriver_i2c_reg_set(redriver, GEN_DEV_SET_REG, val);
 	if (ret < 0)
 		goto err_exit;
@@ -1176,10 +1167,8 @@ static int __maybe_unused redriver_i2c_suspend(struct device *dev)
 			__func__);
 
 	/* Disable redriver chip when USB cable disconnected */
-	if ((!redriver->vbus_active && !redriver->host_active &&
-	     redriver->op_mode != OP_MODE_DP) ||
-	    (redriver->host_active &&
-	     redriver->op_mode == OP_MODE_USB_AND_DP))
+	if (!redriver->vbus_active && !redriver->host_active &&
+	    redriver->op_mode != OP_MODE_DP)
 		ssusb_redriver_gen_dev_set(redriver, false);
 
 	flush_workqueue(redriver->redriver_wq);
@@ -1194,10 +1183,6 @@ static int __maybe_unused redriver_i2c_resume(struct device *dev)
 
 	dev_dbg(redriver->dev, "%s: SS USB redriver resume.\n",
 			__func__);
-
-	if (redriver->host_active &&
-	    redriver->op_mode == OP_MODE_USB_AND_DP)
-		ssusb_redriver_gen_dev_set(redriver, true);
 
 	flush_workqueue(redriver->redriver_wq);
 
